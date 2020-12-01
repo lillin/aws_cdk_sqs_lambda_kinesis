@@ -1,0 +1,2 @@
+jmespath==0.6.1
+python-dateutil<3.0.0,>=2.1

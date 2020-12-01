@@ -1,0 +1,4 @@
+boto3<2,>=1.9.237
+botocore<2,>=1.12.237
+pyqldb>=3.0.0rc1,<3.1.0
+aws-kinesis-agg==1.1.3
