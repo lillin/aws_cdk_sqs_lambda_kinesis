@@ -94,7 +94,7 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       actions: [        
         'sqs:DeleteMessage',
         'sqs:GetQueueAttributes',
-        'sqs:ReceiveMessage'
+        'sqs:SendMessage',
       ],
       resources: [ queueBenefiaCompany.queueArn, queueErgohestiaCompnay.queueArn ]
     }));

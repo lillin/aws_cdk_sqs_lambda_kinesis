@@ -1,13 +1,40 @@
 import boto3
 import base64
+import json
 
-from aws_kinesis_agg.deaggregator import deaggregate_records
+from amazon.ion.simpleion import dumps, loads
+from aws_kinesis_agg.deaggregator import iter_deaggregate_records
 
 
 sqs = boto3.client('sqs')
 
-BENEFIA_QUEUE = 'queue-benefia-company'
-ERGOHESTIA_QUEUE = 'queue-ergohestia-company'
+BENEFIA_QUEUE = 'https://sqs.us-west-2.amazonaws.com/765423797119/queue-benefia-company'
+ERGOHESTIA_QUEUE = 'https://sqs.us-west-2.amazonaws.com/765423797119/queue-ergohestia-company'
+
+
+def send_to_benefia_queue():
+    sqs.send_message(
+        QueueUrl=BENEFIA_QUEUE,
+        DelaySeconds=10,
+        MessageAttributes={},
+        MessageBody=('Company is Benefia!')
+    )
+    print('Message sent!')
+
+
+def send_to_ergohestia_queue():
+    sqs.send_message(
+        QueueUrl=ERGOHESTIA_QUEUE,
+        DelaySeconds=10,
+        MessageAttributes={},
+        MessageBody=('Company is Ergohestia!')
+    )
+
+
+queue_map = {
+    'Benefia': send_to_benefia_queue,
+    'Ergohestia': send_to_ergohestia_queue,
+}
 
 
 def handler(event, context):
@@ -16,16 +43,16 @@ def handler(event, context):
     """
     raw_kinesis_records = event['Records']
 
-    #Deaggregate all records in one call
-    user_records = deaggregate_records(raw_kinesis_records)
-
-    #Iterate through deaggregated records
-    payload = []
-    for record in user_records:        
+    payload = None
+    for record in iter_deaggregate_records(raw_kinesis_records):        
 
         # Kinesis data in Python Lambdas is base64 encoded
-        payload.append(base64.b64decode(record['kinesis']['data']))
+        b_rec = base64.b64decode(record['kinesis']['data'])
 
-    print(payload)
+        payload = loads(b_rec, single_value=True)['payload']
 
-    return 'Successfully processed {} records.'.format(len(user_records))
+    try:
+        company = payload['revision']['data']['company']
+        queue_map[company]()
+    except KeyError:
+        print('Such company does not exist!')
