@@ -19,7 +19,6 @@ def send_to_benefia_queue():
         MessageAttributes={},
         MessageBody=('Company is Benefia!')
     )
-    print('Message sent!')
 
 
 def send_to_ergohestia_queue():
@@ -32,8 +31,8 @@ def send_to_ergohestia_queue():
 
 
 queue_map = {
-    'Benefia': send_to_benefia_queue,
-    'Ergohestia': send_to_ergohestia_queue,
+    'One': send_to_benefia_queue,
+    'Two': send_to_ergohestia_queue,
 }
 
 
@@ -45,7 +44,6 @@ def handler(event, context):
 
     payload = None
     for record in iter_deaggregate_records(raw_kinesis_records):        
-
         # Kinesis data in Python Lambdas is base64 encoded
         b_rec = base64.b64decode(record['kinesis']['data'])
 
@@ -54,5 +52,6 @@ def handler(event, context):
     try:
         company = payload['revision']['data']['company']
         queue_map[company]()
+        print('Message sent!')
     except KeyError:
         print('Such company does not exist!')
