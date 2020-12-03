@@ -1,9 +1,0 @@
-../ionhash/__init__.py
-../ionhash/__pycache__/__init__.cpython-39.pyc
-../ionhash/__pycache__/hasher.cpython-39.pyc
-../ionhash/hasher.py
-PKG-INFO
-SOURCES.txt
-dependency_links.txt
-requires.txt
-top_level.txt
