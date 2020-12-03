@@ -9,3 +9,7 @@ cdk.out
 
 # Parcel default cache directory
 .parcel-cache
+
+handlers/*
+!handlers/kinesis-stream-handler.py
+!handlers/save-data-handler.py
