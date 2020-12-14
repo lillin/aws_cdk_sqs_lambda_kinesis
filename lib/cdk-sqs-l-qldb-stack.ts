@@ -107,11 +107,53 @@ export class CdkSqsLQldbStack extends cdk.Stack {
     //   startingPosition: StartingPosition.TRIM_HORIZON  // return oldest records from shard first
     // }));
 
-    const dataLakeBucket = new Bucket(this, 'MyDataLake');
+    const storageBucket = new Bucket(this, 'MyDataLakeStorage');
+
+    // define role & policy for glue:
+    const glueRole = new iam.Role(this, 'GlueRole', {
+      assumedBy: new iam.ServicePrincipal('glue.amazonaws.com')
+    });
+      
+    // permission to access the data store that is crawled, 
+    // permission to create and update tables and partitions in the AWS Glue Data Catalog. 
+    const glueGeneralPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'glue:*',
+  
+        's3:GetBucketLocation', 
+        's3:ListAllMyBuckets', 
+        's3:GetBucketAcl',
+        's3:ListBucket',
+  
+        'iam:ListRolePolicies', 
+        'iam:GetRole', 
+        'iam:GetRolePolicy',
+  
+        'cloudwatch:PutMetricData',
+      ],
+      resources: ['*'],
+    });
+
+    const glueBucketPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        's3:CreateBucket',
+        's3:GetObject',
+        's3:PutObject',
+        's3:DeleteObject',
+      ],
+      resources: [storageBucket.bucketArn],
+    });
+  
+    new iam.Policy(this, 'GluePolicy', {
+      roles: [glueRole],
+      statements: [glueGeneralPolicyStatement, glueBucketPolicyStatement, ],
+    });
 
     // add glue to stack below:
     const glueDatabase = new glue.Database(this, 'MyGlueDatabase', {
-      databaseName: 'my-glue-database'
+      databaseName: 'my-glue-database',
     });
 
     // table describes a table of data in S3 (data lake):
@@ -120,18 +162,37 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       tableName: 'my-glue-table',
       columns: [{
         name: 'col1',
-        type: glue.Schema.STRING
+        type: glue.Schema.STRING,
       }, {
         name: 'col2',
-        type: glue.Schema.STRING
+        type: glue.Schema.STRING,
       }],
       dataFormat: glue.DataFormat.PARQUET,
 
-      bucket: dataLakeBucket,
-      s3Prefix: 'my-glue-table/'
+      bucket: storageBucket,
+      s3Prefix: 'my-glue-table/',
     });
 
+    // classifies data to determine the format, schema, and associated properties of the raw data
+    new glue.CfnClassifier(this, 'GlueCrawlerClassifier', {
+      csvClassifier: {
+        allowSingleColumn: true, 
+        containsHeader: 'PRESENT', 
+        delimiter: ',', 
+        name: 'crawler-classifier'
+      }
+    });
+  
     // add crawler
+    const glueCrawler = new glue.CfnCrawler(this, 'MyGlueCrawler', {
+      name: 'my-glue-crawler',
+      databaseName: glueDatabase.databaseName,
+      role: glueRole.roleArn,
+      classifiers: ['crawler-classifier'],
+      targets: {
+        s3Targets: [{path: storageBucket.bucketWebsiteUrl}]
+      }
+    });
 
   }
 }
