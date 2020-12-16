@@ -125,30 +125,40 @@ export class CdkSqsLQldbStack extends cdk.Stack {
         's3:ListAllMyBuckets', 
         's3:GetBucketAcl',
         's3:ListBucket',
+
+        's3:CreateBucket',
+        's3:GetObject',
+        's3:PutObject',
+        's3:DeleteObject',
   
         'iam:ListRolePolicies', 
         'iam:GetRole', 
         'iam:GetRolePolicy',
+
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:AssociateKmsKey",
   
         'cloudwatch:PutMetricData',
       ],
       resources: ['*'],
     });
 
-    const glueBucketPolicyStatement = new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: [
-        's3:CreateBucket',
-        's3:GetObject',
-        's3:PutObject',
-        's3:DeleteObject',
-      ],
-      resources: [storageBucket.bucketArn],
-    });
+    // const glueBucketPolicyStatement = new iam.PolicyStatement({
+    //   effect: iam.Effect.ALLOW,
+    //   actions: [
+    //     's3:CreateBucket',
+    //     's3:GetObject',
+    //     's3:PutObject',
+    //     's3:DeleteObject',
+    //   ],
+    //   resources: [storageBucket.bucketArn],
+    // });
   
     new iam.Policy(this, 'GluePolicy', {
       roles: [glueRole],
-      statements: [glueGeneralPolicyStatement, glueBucketPolicyStatement, ],
+      statements: [glueGeneralPolicyStatement, ],
     });
 
     // add glue to stack below:
@@ -156,43 +166,47 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       databaseName: 'my-glue-database',
     });
 
-    // table describes a table of data in S3 (data lake):
-    new glue.Table(this, 'MyGlueTable', {
-      database: glueDatabase,
-      tableName: 'my-glue-table',
-      columns: [{
-        name: 'col1',
-        type: glue.Schema.STRING,
-      }, {
-        name: 'col2',
-        type: glue.Schema.STRING,
-      }],
-      dataFormat: glue.DataFormat.PARQUET,
-
-      bucket: storageBucket,
-      s3Prefix: 'my-glue-table/',
-    });
-
     // classifies data to determine the format, schema, and associated properties of the raw data
     new glue.CfnClassifier(this, 'GlueCrawlerClassifier', {
       csvClassifier: {
         allowSingleColumn: true, 
-        containsHeader: 'PRESENT', 
-        delimiter: ',', 
         name: 'crawler-classifier'
       }
     });
   
+    // FIX ROLE for S3
     // add crawler
-    const glueCrawler = new glue.CfnCrawler(this, 'MyGlueCrawler', {
+    new glue.CfnCrawler(this, 'MyGlueCrawler', {
       name: 'my-glue-crawler',
       databaseName: glueDatabase.databaseName,
       role: glueRole.roleArn,
       classifiers: ['crawler-classifier'],
       targets: {
-        s3Targets: [{path: storageBucket.bucketWebsiteUrl}]
-      }
+        s3Targets: [{path: storageBucket.bucketName}],
+      },
+      schedule: {
+        scheduleExpression: 'cron(*/10 * * * ? *)'
+      },
     });
+
+    // aws s3 cp data_preparation_job.py s3://glue-bucket/jobs
+    // const glueJob = new glue.CfnJob(this, 'MyGlueJob', {
+    //   command: {
+    //     name: 'glueetl',
+    //     pythonVersion: '3.8',
+    //     scriptLocation: `s3://${storageBucket.bucketName}//jobs//data_preparation_job`,  // -> s3://aws-glue-scripts//prod-job1
+    //   },
+    //   role: glueRole.roleArn,
+    //   maxRetries: 0,
+
+    // });
+
+    // const glueDevEndpoint = new glue.CfnDevEndpoint(this, 'MyDevEndpoint', {
+    //   roleArn: glueRole.roleArn,
+    //   endpointName: 'my-dev-endpoint',
+    //   glueVersion: '1.0',
+    //   arguments: {"GLUE_PYTHON_VERSION": "3.8"}
+    // });
 
   }
 }
