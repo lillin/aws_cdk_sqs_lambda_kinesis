@@ -1,8 +1,8 @@
 import * as cdk from '@aws-cdk/core';
-import { Function, Runtime, Code, StartingPosition } from '@aws-cdk/aws-lambda';
-import { SqsEventSource, KinesisEventSource } from '@aws-cdk/aws-lambda-event-sources';
-import { Queue } from '@aws-cdk/aws-sqs';
-import { CfnLedger, CfnStream } from '@aws-cdk/aws-qldb';
+// import { Function, Runtime, Code, StartingPosition } from '@aws-cdk/aws-lambda';
+// import { SqsEventSource, KinesisEventSource } from '@aws-cdk/aws-lambda-event-sources';
+// import { Queue } from '@aws-cdk/aws-sqs';
+// import { CfnLedger, CfnStream } from '@aws-cdk/aws-qldb';
 // import { Stream } from '@aws-cdk/aws-kinesis';
 
 import * as glue from '@aws-cdk/aws-glue';
@@ -15,32 +15,32 @@ export class CdkSqsLQldbStack extends cdk.Stack {
     super(scope, id, props);
 
     // The code that defines your stack goes here
-    const queue = new Queue(this, 'queue', {
-      queueName: 'queue',
-    });
+    // const queue = new Queue(this, 'queue', {
+    //   queueName: 'queue',
+    // });
 
-    const myLambda = new Function(this, 'MyLambda', {
-      // The name of the method within your code that Lambda calls to execute your function. 
-      // The format includes the file name. 
-      handler: 'save-data-handler.handler',
-      code: Code.fromAsset('./handlers'),
-      runtime: Runtime.PYTHON_3_8,
-    });
+    // const myLambda = new Function(this, 'MyLambda', {
+    //   // The name of the method within your code that Lambda calls to execute your function. 
+    //   // The format includes the file name. 
+    //   handler: 'save-data-handler.handler',
+    //   code: Code.fromAsset('./handlers'),
+    //   runtime: Runtime.PYTHON_3_8,
+    // });
 
-    myLambda.addEventSource(new SqsEventSource(queue));
+    // myLambda.addEventSource(new SqsEventSource(queue));
 
-    const ledgerName = 'my-db'
-    new CfnLedger(this, 'MyDB', {
-      permissionsMode: 'ALLOW_ALL',
-      name: ledgerName,
-    });
+    // const ledgerName = 'my-db'
+    // new CfnLedger(this, 'MyDB', {
+    //   permissionsMode: 'ALLOW_ALL',
+    //   name: ledgerName,
+    // });
 
     // add statement to lambda's policy to be able to interract with QLDB
-    myLambda.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW, 
-      actions: [ 'qldb:*' ], 
-      resources: [ `arn:aws:qldb:us-west-2:765423797119:ledger/${ledgerName}` ],
-    }));
+    // myLambda.addToRolePolicy(new iam.PolicyStatement({
+    //   effect: iam.Effect.ALLOW, 
+    //   actions: [ 'qldb:*' ], 
+    //   resources: [ `arn:aws:qldb:us-west-2:765423797119:ledger/${ledgerName}` ],
+    // }));
 
     // add Kinesis stream to write QLDB stream
     // const kinesisStream = new Stream(this, 'MyKinesisStream', {
@@ -107,7 +107,13 @@ export class CdkSqsLQldbStack extends cdk.Stack {
     //   startingPosition: StartingPosition.TRIM_HORIZON  // return oldest records from shard first
     // }));
 
-    const storageBucket = new Bucket(this, 'MyDataLakeStorage');
+    new Bucket(this, 'MySourceBucket', {
+      bucketName: 'source-panini-333-bucket'
+    });
+
+    const storageBucket = new Bucket(this, 'MyStorageBucket', {
+      bucketName: 'storage-panini-333-bucket'
+    });
 
     // define role & policy for glue:
     const glueRole = new iam.Role(this, 'GlueRole', {
@@ -144,17 +150,6 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       ],
       resources: ['*'],
     });
-
-    // const glueBucketPolicyStatement = new iam.PolicyStatement({
-    //   effect: iam.Effect.ALLOW,
-    //   actions: [
-    //     's3:CreateBucket',
-    //     's3:GetObject',
-    //     's3:PutObject',
-    //     's3:DeleteObject',
-    //   ],
-    //   resources: [storageBucket.bucketArn],
-    // });
   
     new iam.Policy(this, 'GluePolicy', {
       roles: [glueRole],
@@ -174,7 +169,6 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       }
     });
   
-    // FIX ROLE for S3
     // add crawler
     new glue.CfnCrawler(this, 'MyGlueCrawler', {
       name: 'my-glue-crawler',
@@ -182,24 +176,26 @@ export class CdkSqsLQldbStack extends cdk.Stack {
       role: glueRole.roleArn,
       classifiers: ['crawler-classifier'],
       targets: {
-        s3Targets: [{path: storageBucket.bucketName}],
+        s3Targets: [{
+          path: storageBucket.bucketName, 
+          exclusions: ['**.py', 'jobs**']
+        }],
       },
-      schedule: {
-        scheduleExpression: 'cron(*/10 * * * ? *)'
-      },
+      // schedule: {
+      //   scheduleExpression: 'cron(*/10 * * * ? *)'
+      // },
     });
 
-    // aws s3 cp data_preparation_job.py s3://glue-bucket/jobs
-    // const glueJob = new glue.CfnJob(this, 'MyGlueJob', {
-    //   command: {
-    //     name: 'glueetl',
-    //     pythonVersion: '3.8',
-    //     scriptLocation: `s3://${storageBucket.bucketName}//jobs//data_preparation_job`,  // -> s3://aws-glue-scripts//prod-job1
-    //   },
-    //   role: glueRole.roleArn,
-    //   maxRetries: 0,
-
-    // });
+    new glue.CfnJob(this, 'MyGlueJob', {
+      command: {
+        name: 'glueetl',
+        pythonVersion: '3',
+        scriptLocation: `s3://${storageBucket.bucketName}/jobs/data_preparation_job.py`,
+      },
+      name: 'my-glue-job',
+      role: glueRole.roleArn,
+      maxRetries: 3,
+    });
 
     // const glueDevEndpoint = new glue.CfnDevEndpoint(this, 'MyDevEndpoint', {
     //   roleArn: glueRole.roleArn,
